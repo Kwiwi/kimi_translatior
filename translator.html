@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kimi Translator & Grammar Correction</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-card: #f5f5f5;
+      --bg-input: #fafafa;
+      --border: #e0e0e0;
+      --text: #1a1a1a;
+      --text-secondary: #666666;
+      --text-muted: #999999;
+      --accent: #000000;
+      --accent-text: #ffffff;
+      --tone-active: #000000;
+      --tone-active-text: #ffffff;
+      --tone-inactive: transparent;
+      --tone-inactive-text: #666666;
+      --tone-border: #e0e0e0;
+      --result-border: #e0e0e0;
+      --copy-border: #cccccc;
+    }
+    [data-theme="dark"] {
+      --bg: #0a0a0a;
+      --bg-card: #141414;
+      --bg-input: #0f0f0f;
+      --border: #2a2a2a;
+      --text: #e5e5e5;
+      --text-secondary: #a0a0a0;
+      --text-muted: #525252;
+      --accent: #ffffff;
+      --accent-text: #000000;
+      --tone-active: #e5e5e5;
+      --tone-active-text: #000000;
+      --tone-inactive: transparent;
+      --tone-inactive-text: #525252;
+      --tone-border: #2a2a2a;
+      --result-border: #2a2a2a;
+      --copy-border: #333333;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px 16px;
+      max-width: 680px;
+      margin: 0 auto;
+      transition: background 0.2s, color 0.2s;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+    .lang-bar {
+      display: flex;
+      gap: 6px;
+    }
+    .lang-bar button, .theme-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 4px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .lang-bar button.active {
+      background: var(--accent);
+      color: var(--accent-text);
+      border-color: var(--accent);
+    }
+    .theme-btn {
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mode-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 28px;
+    }
+    .mode-tab {
+      flex: 1;
+      text-align: center;
+      padding: 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .mode-tab.active {
+      background: var(--accent);
+      color: var(--accent-text);
+      border-color: var(--accent);
+    }
+    .section { display: none; }
+    .section.active { display: block; }
+    .label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    .sublabel {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .tone-wrap { margin-bottom: 20px; }
+    .tone-bar {
+      display: flex;
+      border: 1px solid var(--tone-border);
+      background: var(--bg);
+    }
+    .tone-option {
+      flex: 1;
+      text-align: center;
+      padding: 10px 4px;
+      color: var(--tone-inactive-text);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      border-right: 1px solid var(--tone-border);
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .tone-option:last-child { border-right: none; }
+    .tone-option.active {
+      background: var(--tone-active);
+      color: var(--tone-active-text);
+    }
+    textarea {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+      outline: none;
+      line-height: 1.5;
+      transition: border-color 0.15s;
+    }
+    textarea:focus { border-color: var(--text-muted); }
+    textarea::placeholder { color: var(--text-muted); }
+    .box-small { min-height: 80px; margin-bottom: 16px; }
+    .box-large { min-height: 160px; margin-bottom: 12px; }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--accent);
+      color: var(--accent-text);
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { transform: scale(0.998); }
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 24px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .loading.show { display: block; }
+    .result-box {
+      display: none;
+      margin-top: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--result-border);
+      padding: 16px;
+    }
+    .result-box.show { display: block; }
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--result-border);
+    }
+    .result-title {
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--copy-border);
+      color: var(--text-secondary);
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { border-color: var(--text-muted); color: var(--text); }
+    .result-body {
+      white-space: pre-wrap;
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+    .result-body strong { color: var(--text); font-weight: 700; }
+    .result-body ul { margin: 8px 0; padding-left: 20px; }
+    .result-body li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <div class="lang-bar">
+      <button id="btn-zh" class="active">中文</button>
+      <button id="btn-en">EN</button>
+    </div>
+    <button class="theme-btn" id="btn-theme" title="Toggle dark mode">&#9788;</button>
+  </div>
+
+  <div class="mode-bar">
+    <div id="tab-translate" class="mode-tab active"> 翻译</div>
+    <div id="tab-grammar" class="mode-tab">语法纠错</div>
+  </div>
+
+  <div id="sec-translate" class="section active">
+    <div class="tone-wrap">
+      <div class="sublabel">语气</div>
+      <div class="tone-bar">
+        <div class="tone-option" data-tone="casual">Casual</div>
+        <div class="tone-option active" data-tone="natural">Natural</div>
+        <div class="tone-option" data-tone="formal">Formal</div>
+      </div>
+    </div>
+
+    <div class="label">要求</div>
+    <textarea id="tone-prompt" class="box-small" placeholder=""></textarea>
+
+    <div class="label">输入要翻译的内容</div>
+    <textarea id="translate-input" class="box-large" placeholder=""></textarea>
+
+    <button class="btn" id="btn-translate">翻译</button>
+  </div>
+
+  <div id="sec-grammar" class="section">
+    <div class="label">要求（可选）</div>
+    <textarea id="grammar-prompt" class="box-small" placeholder=""></textarea>
+
+    <div class="label">输入要检查的英文</div>
+    <textarea id="grammar-input" class="box-large" placeholder=""></textarea>
+
+    <button class="btn" id="btn-check">开始检查</button>
+  </div>
+
+  <div id="loading" class="loading">Kimi 处理中...预 计至多需要30秒</div>
+
+  <div id="result-box" class="result-box">
+    <div class="result-header">
+      <span class="result-title">结果</span>
+      <button class="copy-btn" id="btn-copy">复制</button>
+    </div>
+    <div id="result-body" class="result-body"></div>
+  </div>
+
+<script>
+(function() {
+  var defaultPrompts = {
+    casual: "Use a casual, relaxed, and conversational tone. Sound like you are talking to a friend. Use everyday language and contractions where natural. Keep it informal but clear.",
+    natural: "Use a natural, balanced tone that sounds like it was written by an educated native speaker. Not too stiff, not too casual. Just clear, idiomatic, and authentic.",
+    formal: "Use a formal, professional tone. Suitable for business emails, academic papers, or official documents. Avoid contractions, slang, and colloquialisms. Be precise and polished."
+  };
+  var defaultGrammarPrompt = "Focus on grammar, spelling, punctuation, and making the text sound natural and idiomatic. Rewrite awkward phrasing to sound like a native speaker. Explain key errors within 255 words.";
+
+  var currentLang = 'zh';
+  var currentMode = 'translate';
+  var currentTone = 'natural';
+  var prompts = { casual: defaultPrompts.casual, natural: defaultPrompts.natural, formal: defaultPrompts.formal };
+  var grammarPrompt = defaultGrammarPrompt;
+
+  var i18n = {
+    zh: {
+      translate: '翻译',
+      grammar: '语法纠错',
+      tone: '语气',
+      casual: 'Casual',
+      natural: 'Natural',
+      formal: 'Formal',
+      customPromptLabel: '要求',
+      textToTranslate: '输入要翻译的内容',
+      translateBtn: '翻译',
+      grammarPromptLabel: '要求（可选）',
+      textToCheck: '输入要检查的英文',
+      checkBtn: '开始检查',
+      result: '结果',
+      copy: '复制',
+      copied: '已复制',
+      loading: 'Kimi 处理中...预计至多需要30秒',
+      errorEmpty: '请输入内容',
+      phPrompt: '可在此编辑对翻译风格的额外要求...',
+      phText: '在此输入原文...',
+      phGrammarPrompt: '例如：重点关注学术用词、邮件 礼仪...',
+      phGrammarText: '在此输入英文文本...'
+    },
+    en: {
+      translate: 'Translate',
+      grammar: 'Grammar Check',
+      tone: 'Tone',
+      casual: 'Casual',
+      natural: 'Natural',
+      formal: 'Formal',
+      customPromptLabel: 'Additional Instructions (Editable)',
+      textToTranslate: 'Enter text to translate',
+      translateBtn: 'Translate',
+      grammarPromptLabel: 'Additional Focus (Optional)',
+      textToCheck: 'Enter Chinese text to check',
+      checkBtn: 'Check',
+      result: 'Result',
+      copy: 'Copy',
+      copied: 'Copied',
+      loading: 'Kimi is thinking...It may take 30 seconds tops.',
+      errorEmpty: 'Please enter some text',
+      phPrompt: 'Edit additional style instructions here...',
+      phText: 'Enter source text here...',
+      phGrammarPrompt: 'e.g. Focus on academic tone...',
+      phGrammarText: 'Enter Chinese text here...',
+      footerUsage: 'How to Use',
+      footerCredits: 'Credits',
+      footerUsageText: '<strong>Translate:</strong>Enter text in any language, select a tone (Casual/Natural/Formal), and edit the target language and style instructions in the "Requirements" box. Then click Translate to receive your translation.<br><strong>Grammar Check:</strong> Enter English or Chinese text, specify focus areas in the "Requirements (Optional)" box, and click Check for corrections and analysis.<br><strong>Tip:</strong> Press Ctrl+Enter to submit quickly. Click ☀️/🌙 to toggle dark mode.',
+      footerCreditsText: 'Powered by <a href="https://www.moonshot.cn" target="_blank">Moonshot AI (Kimi K2.5)</a> · Interface design by user request · System prompt written by ChatGPT (GPT-5.5-Instant)'
+    }
+  };
+
+  function $(id) { return document.getElementById(id); }
+
+  function setLang(lang) {
+    currentLang = lang;
+    var t = i18n[lang];
+    $("tab-translate").textContent = t.translate;
+    $("tab-grammar").textContent = t.grammar;
+    $("btn-translate").textContent = t.translateBtn;
+    $("btn-check").textContent = t.checkBtn;
+    $("btn-copy").textContent = t.copy;
+    $("loading").textContent = t.loading;
+    document.querySelector(".tone-wrap .sublabel").textContent = t.tone;
+    var opts = document.querySelectorAll(".tone-option");
+    opts[0].textContent = t.casual;
+    opts[1].textContent = t.natural;
+    opts[2].textContent = t.formal;
+    // 在对应 section 内查找 labels，避免混淆
+    var transLabels = $("sec-translate").querySelectorAll(".label");
+    transLabels[0].textContent = t.customPromptLabel;
+    transLabels[1].textContent = t.textToTranslate;
+    var gramLabels = $("sec-grammar").querySelectorAll(".label");
+    gramLabels[0].textContent = t.grammarPromptLabel;
+    gramLabels[1].textContent = t.textToCheck;
+    $("result-box").querySelector(".result-title").textContent = t.result;
+    $("btn-zh").classList.toggle("active", lang === "zh");
+    $("btn-en").classList.toggle("active", lang === "en");
+    $("tone-prompt").placeholder = t.phPrompt;
+    $("translate-input").placeholder = t.phText;
+    $("grammar-prompt").placeholder = t.phGrammarPrompt;
+    $("grammar-input").placeholder = t.phGrammarText;
+    $("footer-usage-label").textContent = t.footerUsage;
+    $("footer-credits-label").textContent = t.footerCredits;
+    $("footer-usage-text").innerHTML = t.footerUsageText;
+    $("footer-credits-text").innerHTML = t.footerCreditsText;
+  }
+
+  function setMode(mode) {
+    currentMode = mode;
+    $("sec-translate").classList.toggle("active", mode === "translate");
+    $("sec-grammar").classList.toggle("active", mode === "grammar");
+    $("tab-translate").classList.toggle("active", mode === "translate");
+    $("tab-grammar").classList.toggle("active", mode === "grammar");
+    hideResult();
+    setLang(currentLang);
+  }
+
+  function setTone(tone) {
+    prompts[currentTone] = $("tone-prompt").value;
+    currentTone = tone;
+    $("tone-prompt").value = prompts[tone];
+    document.querySelectorAll(".tone-option").forEach(function(el) {
+      el.classList.toggle("active", el.getAttribute("data-tone") === tone);
+    });
+  }
+
+  function setLoading(show) {
+    $("loading").classList.toggle("show", show);
+  }
+
+  function hideResult() {
+    $("result-box").classList.remove("show");
+  }
+
+  function showResult(text) {
+    var body = $("result-body");
+    var html = text
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/^- (.+)$/gm, "<li>$1</li>")
+      .replace(/(<li>.+<\/li>\n?)+/g, "<ul>$&</ul>")
+      .replace(/<\/ul>\s*<ul>/g, "");
+    body.innerHTML = html;
+    $("result-box").classList.add("show");
+  }
+
+  function copyResult() {
+    var text = $("result-body").innerText;
+    var btn = $("btn-copy");
+    var orig = btn.textContent;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(function() {
+        btn.textContent = i18n[currentLang].copied;
+        setTimeout(function() { btn.textContent = orig; }, 1500);
+      });
+    } else {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      btn.textContent = i18n[currentLang].copied;
+      setTimeout(function() { btn.textContent = orig; }, 1500);
+    }
+  }
+
+  async function sendRequest(mode, text, customPrompt) {
+    setLoading(true);
+    hideResult();
+    try {
+      var res = await fetch("/api/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: mode, text: text, customPrompt: customPrompt })
+      });
+      var data = await res.json();
+      if (data.error) {
+        throw new Error(data.detail ? data.detail : data.error);
+      }
+      showResult(data.result);
+    } catch (e) {
+      alert("Error: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function sendTranslate() {
+    var text = $("translate-input").value.trim();
+    if (!text) { alert(i18n[currentLang].errorEmpty); return; }
+    prompts[currentTone] = $("tone-prompt").value;
+    var customPrompt = $("tone-prompt").value.trim();
+    sendRequest("translate_en", text, customPrompt);
+  }
+
+  function sendGrammar() {
+    var text = $("grammar-input").value.trim();
+    if (!text) { alert(i18n[currentLang].errorEmpty); return; }
+    grammarPrompt = $("grammar-prompt").value;
+    var customPrompt = $("grammar-prompt").value.trim();
+    sendRequest("grammar", text, customPrompt);
+  }
+
+  function toggleTheme() {
+    var html = document.documentElement;
+    var current = html.getAttribute("data-theme");
+    var next = current === "dark" ? null : "dark";
+    if (next) {
+      html.setAttribute("data-theme", "dark");
+      localStorage.setItem("theme", "dark");
+      $("btn-theme").innerHTML = "&#9790;";
+    } else {
+      html.removeAttribute("data-theme");
+      localStorage.setItem("theme", "light");
+      $("btn-theme").innerHTML = "&#9788;";
+    }
+  }
+
+  $("btn-zh").onclick = function() { setLang("zh"); };
+  $("btn-en").onclick = function() { setLang("en"); };
+  $("tab-translate").onclick = function() { setMode("translate"); };
+  $("tab-grammar").onclick = function() { setMode("grammar"); };
+  $("btn-translate").onclick = sendTranslate;
+  $("btn-check").onclick = sendGrammar;
+  $("btn-copy").onclick = copyResult;
+  $("btn-theme").onclick = toggleTheme;
+
+  document.querySelectorAll(".tone-option").forEach(function(el) {
+    el.onclick = function() { setTone(this.getAttribute("data-tone")); };
+  });
+
+  $("tone-prompt").value = prompts.natural;
+  $("grammar-prompt").value = grammarPrompt;
+
+  var savedTheme = localStorage.getItem("theme");
+  if (savedTheme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+    $("btn-theme").innerHTML = "&#9790;";
+  }
+
+  setLang("zh");
+})();
+</script>
+
+  <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border);">
+    <div class="sublabel" id="footer-usage-label">使用说明</div>
+    <div class="footer-text" id="footer-usage-text" style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 16px;">
+      <strong>翻译模式：</strong>输入任意语言文本，选择语气（Casual/Natural/Formal），可在"要求"框中编辑目标语言和风格指令，点击翻译获取目标语言翻译。<br>
+      <strong>语法纠错：</strong>输入英文或中文文本，在"要求（可选）"框中可指定重点检查方向，点击开始检查获取修改建议和问题分析。<br>
+      <strong>提示：</strong>Ctrl+Enter 可快捷提交。点击☀️/🌙切换夜间模式。
+    </div>
+    <div class="sublabel" id="footer-credits-label">鸣谢</div>
+    <div class="footer-text" id="footer-credits-text" style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+      Powered by <a href="https://www.moonshot.cn" target="_blank" style="color: var(--text-secondary);">Moonshot AI (Kimi K2.5)</a> · Interface design by user request · System prompt written by ChatGPT (GPT-5.5-Instant)
+    </div>
+  </div>
+
+</body>
+</html>
