@@ -32,6 +32,7 @@ async function handleApi(request, env) {
     }
     const systemPrompt = mode === 'grammar' ? SYSTEM_GRAMMAR : SYSTEM_TRANSLATE;
     const userContent = '[TEXT_TO_CHECK]\n' + text.trim() + '\n[/TEXT_TO_CHECK]\n\n[EDITOR_INSTRUCTIONS]\n' + (customPrompt || 'No additional instructions.') + '\n[/EDITOR_INSTRUCTIONS]';
+    
     const resp = await fetch('https://api.moonshot.cn/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -43,16 +44,26 @@ async function handleApi(request, env) {
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
-        ]
+        ],
+        stream: true
       })
     });
+    
     if (!resp.ok) {
       const errText = await resp.text();
       return jsonResponse({ error: 'Kimi API HTTP ' + resp.status, detail: errText }, 502);
     }
-    const data = await resp.json();
-    const result = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || '';
-    return jsonResponse({ result: result });
+
+    // 直接透传 SSE 流，只改写 CORS 头
+    return new Response(resp.body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache',
+      }
+    });
+    
   } catch (e) {
     return jsonResponse({ error: e.message || 'Unknown error' }, 500);
   }
@@ -96,7 +107,7 @@ Output:
 
 const SYSTEM_GRAMMAR = `You are an expert multilingual grammar and style editor.
 Your task:
-Correct grammar, spelling, punctuation, and unclear wording while preserving the author's original tone, personality, emotional intensity, and writing style.
+Correct grammar, spelling, and unclear wording while preserving the author's original tone, personality, emotional intensity, and writing style.
 
 Core principles:
 

@@ -271,7 +271,7 @@
     <button class="btn" id="btn-check">开始检查</button>
   </div>
 
-  <div id="loading" class="loading">Kimi 处理中...预 计至多需要30秒</div>
+  <div id="loading" class="loading">Kimi 处理中...预计至多需要30秒 流式输出，没看到完整内容就是还没处理完</div>
 
   <div id="result-box" class="result-box">
     <div class="result-header">
@@ -288,7 +288,7 @@
     natural: "Use a natural, balanced tone that sounds like it was written by an educated native speaker. Not too stiff, not too casual. Just clear, idiomatic, and authentic.",
     formal: "Use a formal, professional tone. Suitable for business emails, academic papers, or official documents. Avoid contractions, slang, and colloquialisms. Be precise and polished."
   };
-  var defaultGrammarPrompt = "Focus on grammar, spelling, punctuation, and making the text sound natural and idiomatic. Rewrite awkward phrasing to sound like a native speaker. Explain key errors within 255 words.";
+  var defaultGrammarPrompt = "Make the minimum necessary changes.";
 
   var currentLang = 'zh';
   var currentMode = 'translate';
@@ -313,12 +313,16 @@
       result: '结果',
       copy: '复制',
       copied: '已复制',
-      loading: 'Kimi 处理中...预计至多需要30秒',
+      loading: 'Kimi 处理中...预计至多需要30秒。采用流式输出，没看到完整内容就是还没处理完',
       errorEmpty: '请输入内容',
       phPrompt: '可在此编辑对翻译风格的额外要求...',
       phText: '在此输入原文...',
       phGrammarPrompt: '例如：重点关注学术用词、邮件 礼仪...',
-      phGrammarText: '在此输入英文文本...'
+      phGrammarText: '在此输入英文文本...',
+      footerUsage: '使用说明',
+      footerCredits: '鸣谢',
+      footerUsageText: '<strong>翻译模式：</strong>输入任意语言文本，选择语气（Casual/Natural/Formal），可在"要求"框中编辑目标语言和风格指令，点击翻译获取目标语言翻译。<br><strong>语法纠错：</strong>输入英文或中文文本，在"要求（可选）"框中可指定重点检查方向，点击开始检查 获取修改建议和问题分析。<br><strong>提示：</strong>Ctrl+Enter 可快捷提交。 点击☀️/🌙切换夜间模式。',
+      footerCreditsText: 'Powered by <a href="https://www.moonshot.cn" target="_blank">Moonshot AI (Kimi K2.5)</a> · Interface design by user request · System prompt written by ChatGPT (GPT-5.5-Instant)'
     },
     en: {
       translate: 'Translate',
@@ -336,7 +340,7 @@
       result: 'Result',
       copy: 'Copy',
       copied: 'Copied',
-      loading: 'Kimi is thinking...It may take 30 seconds tops.',
+      loading: 'Kimi is thinking...It may take 30 seconds tops. Streaming output. If you do not see the complete content yet, that means it is still processing',
       errorEmpty: 'Please enter some text',
       phPrompt: 'Edit additional style instructions here...',
       phText: 'Enter source text here...',
@@ -365,7 +369,6 @@
     opts[0].textContent = t.casual;
     opts[1].textContent = t.natural;
     opts[2].textContent = t.formal;
-    // 在对应 section 内查找 labels，避免混淆
     var transLabels = $("sec-translate").querySelectorAll(".label");
     transLabels[0].textContent = t.customPromptLabel;
     transLabels[1].textContent = t.textToTranslate;
@@ -418,7 +421,7 @@
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/^- (.+)$/gm, "<li>$1</li>")
       .replace(/(<li>.+<\/li>\n?)+/g, "<ul>$&</ul>")
-      .replace(/<\/ul>\s*<ul>/g, "");
+      .replace(/<<\/ul>\s*<<ul>/g, "");
     body.innerHTML = html;
     $("result-box").classList.add("show");
   }
@@ -447,19 +450,65 @@
   async function sendRequest(mode, text, customPrompt) {
     setLoading(true);
     hideResult();
+
     try {
       var res = await fetch("/api/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: mode, text: text, customPrompt: customPrompt })
       });
-      var data = await res.json();
-      if (data.error) {
-        throw new Error(data.detail ? data.detail : data.error);
+
+      if (!res.ok) {
+        var errData = await res.json().catch(function() { return {}; });
+        throw new Error(errData.detail || errData.error || ("HTTP " + res.status));
       }
-      showResult(data.result);
+
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = "";
+      var fullText = "";
+
+      var resultBox = $("result-box");
+      var resultBody = $("result-body");
+      resultBody.textContent = "";
+      resultBox.classList.add("show");
+
+      while (true) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+
+        buffer += decoder.decode(chunk.value, { stream: true });
+        var lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line || line.indexOf("data: ") !== 0) continue;
+          var data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
+          try {
+            var json = JSON.parse(data);
+            if (json.error) throw new Error(json.error.message || "API Error");
+            var content = (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) || "";
+            if (content) {
+              fullText += content;
+              resultBody.textContent = fullText;
+            }
+          } catch (e) {
+            if (e.message && e.message.indexOf("API") >= 0) throw e;
+          }
+        }
+      }
+
+      if (fullText) {
+        showResult(fullText);
+      } else {
+        hideResult();
+      }
+
     } catch (e) {
       alert("Error: " + e.message);
+      hideResult();
     } finally {
       setLoading(false);
     }
@@ -518,18 +567,22 @@
     $("btn-theme").innerHTML = "&#9790;";
   }
 
-  setLang("zh");
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function() { setLang("zh"); });
+  } else {
+    setLang("zh");
+  }
 })();
 </script>
 
   <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border);">
-    <div class="sublabel" id="footer-usage-label">使用说明</div>
+    <div class="sublabel" id="footer-usage-label">使 用说明</div>
     <div class="footer-text" id="footer-usage-text" style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 16px;">
       <strong>翻译模式：</strong>输入任意语言文本，选择语气（Casual/Natural/Formal），可在"要求"框中编辑目标语言和风格指令，点击翻译获取目标语言翻译。<br>
-      <strong>语法纠错：</strong>输入英文或中文文本，在"要求（可选）"框中可指定重点检查方向，点击开始检查获取修改建议和问题分析。<br>
-      <strong>提示：</strong>Ctrl+Enter 可快捷提交。点击☀️/🌙切换夜间模式。
+      <strong>语法纠错：</strong>输入英文或中文文本，在"要求（可选）"框中可指定重点检查方向，点击开始检查 获取修改建议和问题分析。<br>
+      <strong>提示：</strong>Ctrl+Enter 可快捷提交。 点击☀️/🌙切换夜间模式。
     </div>
-    <div class="sublabel" id="footer-credits-label">鸣谢</div>
+    <div class="sublabel" id="footer-credits-label"> 鸣谢</div>
     <div class="footer-text" id="footer-credits-text" style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
       Powered by <a href="https://www.moonshot.cn" target="_blank" style="color: var(--text-secondary);">Moonshot AI (Kimi K2.5)</a> · Interface design by user request · System prompt written by ChatGPT (GPT-5.5-Instant)
     </div>
